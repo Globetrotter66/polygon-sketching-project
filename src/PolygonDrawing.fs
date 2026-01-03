@@ -63,7 +63,27 @@ For FinishPolygon mesages:
  - if there is a current polygon, reset the current polygon to None and add the current polygon as a new elemnet to finishedPolygons.
 *)
 let updateModel (msg : Msg) (model : Model) =
-    model
+    match msg with
+    | AddPoint pos ->
+        match model.currentPolygon with
+        | None -> 
+            // Create a new list with the first point
+            { model with currentPolygon = Some [pos] }
+        | Some points -> 
+            // Prepend new point to the existing list (Reverse order for efficiency)
+            { model with currentPolygon = Some (pos :: points) }
+
+    | FinishPolygon ->
+        match model.currentPolygon with
+        | None -> 
+            model // Ignore if nothing to finish
+        | Some points ->
+            // Add the current polygon to finished list and clear active
+            { model with 
+                finishedPolygons = points :: model.finishedPolygons
+                currentPolygon = None }
+                
+    | _ -> model // Undo/Redo/Cursor are handled by the wrapper
 
 // wraps an update function with undo/redo.
 let addUndoRedo (updateFunction : Msg -> Model -> Model) (msg : Msg) (model : Model) =
