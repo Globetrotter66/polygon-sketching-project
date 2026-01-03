@@ -85,6 +85,11 @@ let updateModel (msg : Msg) (model : Model) =
                 
     | _ -> model // Undo/Redo/Cursor are handled by the wrapper
 
+let removeFirst lst =
+    match lst with
+    | h :: t -> t    // If list has a head (h) and a tail (t), return just the tail
+    | [] -> []
+
 // wraps an update function with undo/redo.
 let addUndoRedo (updateFunction : Msg -> Model -> Model) (msg : Msg) (model : Model) =
     // first let us, handle the cursor position, which is not undoable, and handle undo/redo messages
@@ -96,13 +101,33 @@ let addUndoRedo (updateFunction : Msg -> Model -> Model) (msg : Msg) (model : Mo
     | Undo -> 
         // TODO implement undo logics, HINT: restore the model stored in past, and replace the current
         // state with it.
-        model
+        match model.past with
+        | None -> model // Nothing to undo
+        | Some previousState -> 
+        { previousState with
+            future = Some { model with past = None; future = None }
+            mousePos = model.mousePos } 
     | Redo -> 
-        // TODO: same as undo
-        model
+        match model.future with
+        | None -> model // Nothing to redo
+        | Some nextState ->
+            // To redo: Restore 'future', put current into 'past'
+            { nextState with 
+                past = Some { model with past = None; future = None } 
+                mousePos = model.mousePos }
     | _ -> 
         // use the provided update function for all remaining messages
-        { updateFunction msg model with past = Some model }
+        //{ updateFunction msg model with past = Some model },
+        // Run core logic
+        let nextModel = updateFunction msg model
+        
+        // If the model actually changed (excluding mouse), update history
+        if nextModel = model then 
+            model 
+        else
+            { nextModel with 
+                past = Some { model with past = None; future = None } // Deep snapshot
+                future = None } // New actions clear the redo chain
 
 
 let update (msg : Msg) (model : Model)  =
