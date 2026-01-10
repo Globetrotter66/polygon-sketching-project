@@ -77,12 +77,14 @@ let updateModel (msg : Msg) (model : Model) =
         match model.currentPolygon with
         | None -> 
             model // Ignore if nothing to finish
+        | Some points when points.Length < 3 ->
+            // Logic choice: We could either ignore the finish command 
+            // or reset the polygon. Usually, ignoring is better for UX.
+            model 
         | Some points ->
-            // Add the current polygon to finished list and clear active
             { model with 
                 finishedPolygons = points :: model.finishedPolygons
                 currentPolygon = None }
-                
     | _ -> model // Undo/Redo/Cursor are handled by the wrapper
 
 let removeFirst lst =
@@ -90,44 +92,48 @@ let removeFirst lst =
     | h :: t -> t    // If list has a head (h) and a tail (t), return just the tail
     | [] -> []
 
-// wraps an update function with undo/redo.
+
 let addUndoRedo (updateFunction : Msg -> Model -> Model) (msg : Msg) (model : Model) =
-    // first let us, handle the cursor position, which is not undoable, and handle undo/redo messages
-    // in a next step we actually run the "core" system logics.
     match msg with
     | SetCursorPos p -> 
-        // update the mouse position and create a new model.
+        // We do NOT update the 'past' here because moving the mouse 
+        // shouldn't count as an undoable action.
         { model with mousePos = p }
+
     | Undo -> 
-        // TODO implement undo logics, HINT: restore the model stored in past, and replace the current
-        // state with it.
         match model.past with
-        | None -> model // Nothing to undo
-        | Some previousState -> 
-        { previousState with
-            future = Some { model with past = None; future = None }
-            mousePos = model.mousePos } 
+        | None -> model // Nowhere to go back to
+        | Some previousState ->
+            // 1. Take the state we are moving TO (previousState)
+            // 2. Set its 'future' to be where we are right NOW (model)
+            // 3. Keep the current mouse position so the cursor doesn't jump
+            { previousState with 
+                future = Some model 
+                mousePos = model.mousePos }
+
     | Redo -> 
         match model.future with
-        | None -> model // Nothing to redo
+        | None -> model // Nowhere to go forward to
         | Some nextState ->
-            // To redo: Restore 'future', put current into 'past'
+            // 1. Take the state we are moving TO (nextState)
+            // 2. Ensure its 'past' is set to where we are NOW (model)
             { nextState with 
-                past = Some { model with past = None; future = None } 
+                past = Some model 
                 mousePos = model.mousePos }
+
     | _ -> 
-        // use the provided update function for all remaining messages
-        //{ updateFunction msg model with past = Some model },
-        // Run core logic
+        // For AddPoint or FinishPolygon:
         let nextModel = updateFunction msg model
         
-        // If the model actually changed (excluding mouse), update history
         if nextModel = model then 
             model 
         else
+            // Standard New Action Logic:
+            // The 'past' of the new model is the 'model' we were just in.
+            // This 'model' already has its own 'past', creating the chain!
             { nextModel with 
-                past = Some { model with past = None; future = None } // Deep snapshot
-                future = None } // New actions clear the redo chain
+                past = Some model 
+                future = None } // New actions always break the "future" redo chain
 
 
 let update (msg : Msg) (model : Model)  =
@@ -137,8 +143,14 @@ let update (msg : Msg) (model : Model)  =
 [<Emit("getSvgCoordinates($0)")>] // wrapper to use the getSvgCoordinates JS function (provided by index.html) from f# here typesafely.
 let getSvgCoordinates (o: Browser.Types.MouseEvent): Coord = jsNative
 
-let viewPolygon (color : string) (points : PolyLine) =
-    points 
+let viewPolygon (color : string) (points : PolyLine) (isClosed : bool) =
+    let pointsToDraw = 
+        if isClosed && not (List.isEmpty points) then
+            points @ [List.head points] // Append the first point to the end
+        else
+            points
+
+    pointsToDraw 
     |> List.pairwise 
     |> List.map (fun (c0,c1) ->
         Svg.line [
@@ -160,21 +172,40 @@ let render (model : Model) (dispatch : Msg -> unit) =
             svg.stroke("black"); svg.strokeWidth(2); svg.fill "none"
         ] 
 
-    // collect all svg elements of all finished polygons
-    let finisehdPolygons = 
-        model.finishedPolygons |> List.collect (viewPolygon "green")
-    let currentPolygon =
+    // 1. Finished polygons are CLOSED (true)
+    let finishedPolygonsElements = 
+        model.finishedPolygons 
+        |> List.collect (fun poly -> viewPolygon "green" poly true)
+
+    // 2. The current polygon is OPEN (false)
+    let currentPolygonElements =
         match model.currentPolygon with
-        | None -> [] // if we have no polygon, create empty svg list
+        | None -> []
         | Some p -> 
             match model.mousePos with
             | None -> 
-                viewPolygon "red" p
+                viewPolygon "red" p false
             | Some preview -> 
-                // if we have a current mouse position, prepend the mouse position to the resulting polygon
-                viewPolygon "red" (preview :: p)
+                // We add the preview point to the start for drawing
+                viewPolygon "red" (preview :: p) false
  
-    let svgElements = List.concat [finisehdPolygons; currentPolygon]
+    let svgElements = List.concat [finishedPolygonsElements; currentPolygonElements]
+
+    // // collect all svg elements of all finished polygons
+    // let finisehdPolygons = 
+    //     model.finishedPolygons |> List.collect (viewPolygon "green")
+    // let currentPolygon =
+    //     match model.currentPolygon with
+    //     | None -> [] // if we have no polygon, create empty svg list
+    //     | Some p -> 
+    //         match model.mousePos with
+    //         | None -> 
+    //             viewPolygon "red" p
+    //         | Some preview -> 
+    //             // if we have a current mouse position, prepend the mouse position to the resulting polygon
+    //             viewPolygon "red" (preview :: p)
+ 
+    // let svgElements = List.concat [finisehdPolygons; currentPolygon]
 
     Html.div [
         prop.style [style.custom("userSelect","none")]

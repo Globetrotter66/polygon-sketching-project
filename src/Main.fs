@@ -7,8 +7,8 @@ open Elmish.HMR // Elmish.HMR needs to be the last open instruction in order to 
  
    
 let init,update,render = 
-    Canvas.init, Canvas.update, Canvas.render
-    //PolygonDrawing.init, PolygonDrawing.update, PolygonDrawing.render
+    //Canvas.init, Canvas.update, Canvas.render
+    PolygonDrawing.init, PolygonDrawing.update, PolygonDrawing.render
     //Counter.init, Counter.update, Counter.render
  
 Program.mkProgram init update render
