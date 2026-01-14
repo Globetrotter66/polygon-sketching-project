@@ -21,7 +21,8 @@ namespace WinForms
 
             public CanvasState(List<List<Point>> finished, List<Point> active)
             {
-                Finished = finished.Select(p => new List<Point>(p)).ToList();
+                // functional feature
+                Finished = finished.Select(p => new List<Point>(p)).ToList(); // improve here?
                 Active = new List<Point>(active);
             }
         }
@@ -91,7 +92,7 @@ namespace WinForms
 
                     if (e.Clicks == 2)
                     {
-                        if (_currentPolygon.Count > 1)
+                        if (_currentPolygon.Count > 2)
                         {
                             _finishedPolygons.Add(new List<Point>(_currentPolygon));
                         }
@@ -148,6 +149,7 @@ namespace WinForms
 
             private void SaveToUndo()
             {
+                // functional feature
                 _undoStack.Push(new CanvasState(_finishedPolygons, _currentPolygon));
             }
 

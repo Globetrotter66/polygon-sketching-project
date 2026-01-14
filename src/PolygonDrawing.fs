@@ -70,22 +70,20 @@ let updateModel (msg : Msg) (model : Model) =
             // Create a new list with the first point
             { model with currentPolygon = Some [pos] }
         | Some points -> 
-            // Prepend new point to the existing list (Reverse order for efficiency)
+            // Prepend new point to the existing list
             { model with currentPolygon = Some (pos :: points) }
 
     | FinishPolygon ->
         match model.currentPolygon with
         | None -> 
             model // Ignore if nothing to finish
-        | Some points when points.Length < 3 ->
-            // Logic choice: We could either ignore the finish command 
-            // or reset the polygon. Usually, ignoring is better for UX.
-            model 
+        | Some points when points.Length < 3 -> // performance improvement: Some (p3 :: p2 :: p1 :: rest) as poly
+            model // Ignore if polygon less than 3 points (definition)
         | Some points ->
             { model with 
                 finishedPolygons = points :: model.finishedPolygons
                 currentPolygon = None }
-    | _ -> model // Undo/Redo/Cursor are handled by the wrapper
+    | _ -> model
 
 let removeFirst lst =
     match lst with
@@ -96,8 +94,6 @@ let removeFirst lst =
 let addUndoRedo (updateFunction : Msg -> Model -> Model) (msg : Msg) (model : Model) =
     match msg with
     | SetCursorPos p -> 
-        // We do NOT update the 'past' here because moving the mouse 
-        // shouldn't count as an undoable action.
         { model with mousePos = p }
 
     | Undo -> 
